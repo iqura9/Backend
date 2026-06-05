@@ -23,6 +23,7 @@ export const taskResponseSchema = z
     description: z.string(),
     status: statusSchema,
     priority: prioritySchema,
+    estimation: z.number().positive().nullable().openapi({ example: 2, description: "Estimated hours" }),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
@@ -44,6 +45,7 @@ export const createTaskSchema = z
       .openapi({ example: "Add JWT-based auth to the REST API using RS256" }),
     status: statusSchema.optional(),
     priority: prioritySchema.optional(),
+    estimation: z.number().positive().optional().openapi({ example: 2, description: "Estimated hours" }),
     parentId: z
       .number()
       .int()
@@ -59,6 +61,7 @@ export const updateTaskSchema = z
     description: z.string().max(10_000).optional(),
     status: statusSchema.optional(),
     priority: prioritySchema.optional(),
+    estimation: z.number().positive().nullable().optional().openapi({ example: 2, description: "Estimated hours" }),
   })
   .refine((d) => Object.keys(d).length > 0, {
     message: "At least one field must be provided",

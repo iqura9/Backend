@@ -12,6 +12,7 @@ export interface Task {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  estimation: number | null; // hours
   createdAt: string; // ISO-8601
   updatedAt: string; // ISO-8601
 }
@@ -25,6 +26,7 @@ export interface TaskRow {
   description: string;
   status: TaskStatus;
   priority: TaskPriority;
+  estimation: number | null;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +38,7 @@ export interface CreateTaskInput {
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  estimation?: number;
   parentId?: number;
 }
 
@@ -44,6 +47,7 @@ export interface UpdateTaskInput {
   description?: string;
   status?: TaskStatus;
   priority?: TaskPriority;
+  estimation?: number | null;
 }
 
 export interface TaskQuery {
@@ -64,6 +68,7 @@ export function rowToTask(row: TaskRow): Task {
     description: row.description,
     status: row.status,
     priority: row.priority,
+    estimation: row.estimation ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };

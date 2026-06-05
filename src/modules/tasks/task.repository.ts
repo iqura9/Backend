@@ -24,7 +24,7 @@ export interface TaskRepository {
 const PRIORITY_RANK = `CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`;
 
 const SELECT_COLS = `
-  id, parent_id, title, description, status, priority, created_at, updated_at
+  id, parent_id, title, description, status, priority, estimation, created_at, updated_at
 `;
 
 export class SqliteTaskRepository implements TaskRepository {
@@ -74,8 +74,8 @@ export class SqliteTaskRepository implements TaskRepository {
   create(input: CreateTaskInput): Task {
     const { lastInsertRowid } = this.db
       .prepare(
-        `INSERT INTO tasks (parent_id, title, description, status, priority)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (parent_id, title, description, status, priority, estimation)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.parentId ?? null,
@@ -83,6 +83,7 @@ export class SqliteTaskRepository implements TaskRepository {
         input.description ?? "",
         input.status ?? "todo",
         input.priority ?? "medium",
+        input.estimation ?? null,
       );
 
     return this.findById(lastInsertRowid as number)!;
@@ -96,6 +97,7 @@ export class SqliteTaskRepository implements TaskRepository {
     if (input.description !== undefined) { sets.push("description = ?"); params.push(input.description); }
     if (input.status !== undefined) { sets.push("status = ?"); params.push(input.status); }
     if (input.priority !== undefined) { sets.push("priority = ?"); params.push(input.priority); }
+    if ("estimation" in input) { sets.push("estimation = ?"); params.push(input.estimation ?? null); }
 
     if (sets.length === 0) return this.findById(id);
 
