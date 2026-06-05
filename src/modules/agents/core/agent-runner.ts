@@ -36,11 +36,8 @@ export interface AgentRunOptions {
 /**
  * Generic multi-step tool-calling agent loop.
  *
- * Priority order:
- *   1. Gemini models (env.AI_MODELS list) — skipped entirely if GEMINI_API_KEY missing.
- *   2. Claude Haiku (claude-haiku-4-5-20251001) — used when Gemini is unavailable or
- *      all quota is exhausted. Requires ANTHROPIC_API_KEY.
- *   3. ServiceUnavailableError — if neither key is configured.
+ * Provider order is controlled by AI_PROVIDER_PRIORITY (default: "gemini").
+ * The other provider is used as fallback. ServiceUnavailableError if neither key is set.
  */
 export async function runAgent(options: AgentRunOptions): Promise<AgentResult> {
   const { systemPrompt, userMessage, toolNames, registry, modelOptions, maxSteps = 6 } = options;
@@ -52,37 +49,52 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentResult> {
     ...modelOptions,
   };
 
+  const preferClaude = env.AI_PROVIDER_PRIORITY === "claude";
   let lastError: unknown;
 
-  // ── 1. Try Gemini models (if key is configured) ───────────────────────────────
-  if (env.GEMINI_API_KEY) {
+  async function tryGemini(): Promise<AgentResult | null> {
+    if (!env.GEMINI_API_KEY) return null;
     for (const modelName of getModelList()) {
       try {
         return await runOnGemini(modelName, modelOpts, userMessage, registry, toolNames, maxSteps);
       } catch (err: unknown) {
-        if (isQuotaError(err)) {
-          logger.warn({ model: modelName }, "Gemini quota exceeded, trying next model");
-          lastError = err;
-          continue;
-        }
-        throw err; // Non-quota errors are fatal
+        logger.warn(
+          { model: modelName, cause: err instanceof Error ? err.message : String(err) },
+          "Gemini model failed, trying next",
+        );
+        lastError = err;
       }
     }
-    logger.warn({ lastError }, "All Gemini models exhausted — falling back to Claude Haiku");
+    logger.warn({ lastError }, "All Gemini models exhausted");
+    return null;
   }
 
-  // ── 2. Claude Haiku fallback ──────────────────────────────────────────────────
-  if (isClaudeAvailable()) {
+  async function tryClaude(): Promise<AgentResult | null> {
+    if (!isClaudeAvailable()) return null;
     try {
       return await runOnClaude(systemPrompt, userMessage, declarations, registry, toolNames, maxSteps);
     } catch (err: unknown) {
-      throw new AgentError("All AI providers failed", { lastError: err });
+      logger.warn({ cause: err instanceof Error ? err.message : String(err) }, "Claude failed");
+      lastError = err;
+      return null;
     }
   }
 
-  // ── 3. No usable AI key ───────────────────────────────────────────────────────
+  const [primary, fallback] = preferClaude
+    ? [tryClaude, tryGemini]
+    : [tryGemini, tryClaude];
+
+  const primaryResult = await primary();
+  if (primaryResult) return primaryResult;
+
+  logger.warn({ priority: env.AI_PROVIDER_PRIORITY }, "Primary provider unavailable — trying fallback");
+  const fallbackResult = await fallback();
+  if (fallbackResult) return fallbackResult;
+
   throw new ServiceUnavailableError(
-    "AI features require GEMINI_API_KEY or ANTHROPIC_API_KEY in your .env file and a restart.",
+    lastError
+      ? "All AI providers failed. Check your API keys and model availability."
+      : "AI features require GEMINI_API_KEY or ANTHROPIC_API_KEY in your .env file and a restart.",
   );
 }
 
@@ -241,16 +253,3 @@ async function executeTool(
   }
 }
 
-function isQuotaError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message.toLowerCase();
-  return (
-    msg.includes("quota") ||
-    msg.includes("rate limit") ||
-    msg.includes("rate_limit") ||
-    msg.includes("resource_exhausted") ||
-    msg.includes("overloaded") ||
-    (err as unknown as { status?: number }).status === 429 ||
-    (err as unknown as { status?: number }).status === 403
-  );
-}
