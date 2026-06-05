@@ -1,0 +1,7 @@
+{
+  "model": "opusplan",
+  "theme": "light",
+  "permissions": {
+    "deny": ["Read(**/.env)", "Read(**/.env.*)"]
+  }
+}
