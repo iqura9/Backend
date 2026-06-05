@@ -19,6 +19,42 @@ function getGenAI(): GoogleGenerativeAI {
   return genAI;
 }
 
+// ── Available-model cache (TTL: 60 s) ─────────────────────────────────────────
+
+let _availableCache: { models: string[]; expiresAt: number } | undefined;
+
+/**
+ * Fetches available Gemini models from the API, filters to those in env.AI_MODELS
+ * (preserving priority order), and caches the result for 60 seconds.
+ * Returns an empty array if the API key is missing or the request fails.
+ */
+export async function getAvailableModels(): Promise<string[]> {
+  if (!env.GEMINI_API_KEY) return [];
+
+  const now = Date.now();
+  if (_availableCache && now < _availableCache.expiresAt) {
+    return _availableCache.models;
+  }
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${env.GEMINI_API_KEY}`,
+    );
+    if (!res.ok) return [];
+
+    const data = (await res.json()) as { models?: { name: string }[] };
+    const available = new Set(
+      (data.models ?? []).map((m) => m.name.replace(/^models\//, "")),
+    );
+
+    const filtered = env.AI_MODELS.filter((m) => available.has(m));
+    _availableCache = { models: filtered, expiresAt: now + 60_000 };
+    return filtered;
+  } catch {
+    return [];
+  }
+}
+
 export interface ModelOptions {
   tools?: FunctionDeclarationsTool[];
   systemInstruction?: string;

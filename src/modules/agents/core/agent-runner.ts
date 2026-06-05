@@ -1,6 +1,6 @@
 import type { FunctionCallPart, FunctionResponsePart } from "@google/generative-ai";
 import Anthropic from "@anthropic-ai/sdk";
-import { getModel, getModelList, type ModelOptions } from "./gemini.client";
+import { getModel, getAvailableModels, type ModelOptions } from "./gemini.client";
 import { getAnthropic, CLAUDE_MODEL, toAnthropicTools, isClaudeAvailable } from "./claude.client";
 import type { ToolRegistry } from "./tool-registry";
 import { AgentError, ServiceUnavailableError } from "../../../shared/errors";
@@ -54,19 +54,26 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentResult> {
 
   async function tryGemini(): Promise<AgentResult | null> {
     if (!env.GEMINI_API_KEY) return null;
-    for (const modelName of getModelList()) {
-      try {
-        return await runOnGemini(modelName, modelOpts, userMessage, registry, toolNames, maxSteps);
-      } catch (err: unknown) {
-        logger.warn(
-          { model: modelName, cause: err instanceof Error ? err.message : String(err) },
-          "Gemini model failed, trying next",
-        );
-        lastError = err;
-      }
+
+    const available = await getAvailableModels();
+    if (available.length === 0) {
+      logger.warn("No Gemini models available");
+      return null;
     }
-    logger.warn({ lastError }, "All Gemini models exhausted");
-    return null;
+
+    const modelName = available[0];
+    logger.debug({ model: modelName, available }, "Using first available Gemini model");
+
+    try {
+      return await runOnGemini(modelName, modelOpts, userMessage, registry, toolNames, maxSteps);
+    } catch (err: unknown) {
+      logger.warn(
+        { model: modelName, cause: err instanceof Error ? err.message : String(err) },
+        "Gemini model failed",
+      );
+      lastError = err;
+      return null;
+    }
   }
 
   async function tryClaude(): Promise<AgentResult | null> {
