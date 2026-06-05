@@ -162,6 +162,7 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
                   title: { type: SchemaType.STRING },
                   description: { type: SchemaType.STRING },
                   priority: { type: SchemaType.STRING },
+                  estimation: { type: SchemaType.NUMBER, description: "Estimated effort in hours" },
                 },
                 required: ["title"],
               },
@@ -173,7 +174,7 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
       execute: async (args) => {
         const { parentId, items } = args as {
           parentId: number;
-          items: Array<{ title: string; description?: string; priority?: TaskPriority }>;
+          items: Array<{ title: string; description?: string; priority?: TaskPriority; estimation?: number }>;
         };
         try {
           return service.createSubtasks(parentId, items);
