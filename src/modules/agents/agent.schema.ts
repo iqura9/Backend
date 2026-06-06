@@ -40,8 +40,23 @@ export const decomposeRequestSchema = z
 
 // ─── Status update ────────────────────────────────────────────────────────────
 
+const planItemSchema = z.object({
+  id: z.number().int().positive(),
+  title: z.string(),
+  hours: z.number(),
+});
+
+const planSchema = z.object({
+  items: z.array(planItemSchema),
+  focus: z.string().optional(),
+  totalHours: z.number().optional(),
+});
+
 export const statusUpdateRequestSchema = z.object({
-  taskId: z.number().int().positive(),
+  /** Kept for backwards-compat but ignored by the agent — scoping is now date-based. */
+  taskId: z.number().int().positive().optional(),
+  /** The saved "Plan my day" output — enables planned-vs-actual comparison. */
+  plan: planSchema.optional(),
   notes: z.string().max(2000).optional(),
   tone: z.enum(["technical", "casual", "formal"]).optional(),
 });

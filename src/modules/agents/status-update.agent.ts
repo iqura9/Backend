@@ -1,45 +1,85 @@
 import { runAgent, type AgentResult } from "./core/agent-runner";
 import type { ToolRegistry } from "./core/tool-registry";
 
-const SYSTEM_PROMPT = `You are a staff engineer composing async team status updates.
+const SYSTEM_PROMPT = `You are a staff engineer composing a daily standup report.
 
-Your updates appear in the team's Slack channel — teammates read them without asking follow-ups.
+Reason SILENTLY using the tools, then respond with ONLY a single JSON object — no markdown, no code fences, no prose before or after it.
+
+How to think (internally, do not output):
+1. Call list_tasks (no filter) to get every task and subtask.
+2. Determine today's date from the user message ("Today is …").
+3. Keep tasks whose updatedAt starts with today's date (YYYY-MM-DD). These are the tasks touched today.
+4. Bucket them:
+   - doneToday: status === "done" AND updatedAt is today.
+   - inProgress: status === "in-progress" AND updatedAt is today.
+   - nextUp: top 3 non-done root tasks (parentId === null) NOT already in the above lists, ranked by priority (high > medium > low).
+5. If a plan was provided: match each plan item id against doneToday ids → completed count; the rest are slipped.
+6. blockers: an empty array unless the caller's notes explicitly mention a blocker.
+7. summary: a single headline sentence like "Completed 2 tasks, 1 in progress" — do NOT mention raw task IDs.
+
+Respond with EXACTLY this JSON shape and nothing else:
+{
+  "date": "<YYYY-MM-DD for today>",
+  "summary": "<one-line headline>",
+  "doneToday": [{ "id": <number>, "title": <string>, "status": "done" }],
+  "inProgress": [{ "id": <number>, "title": <string>, "status": "in-progress" }],
+  "nextUp": [{ "id": <number>, "title": <string>, "status": <string> }],
+  "blockers": [],
+  "planComparison": {
+    "planned": <number — total plan items, omit key entirely if no plan supplied>,
+    "completed": <number — plan items that are done today>,
+    "slipped": [{ "id": <number>, "title": <string>, "status": <string> }]
+  }
+}
 
 Rules:
-1. Call get_task to fetch the task. Then call list_tasks with the task's id as parentId to get its subtasks.
-2. Write a short, scannable update:
-   - One header line: "✅ Done" / "🔄 In Progress" / "📋 Todo" — matching task status.
-   - Bullet points: what was completed, what's active, what's next.
-   - If there are subtasks, reflect their statuses accurately.
-   - Max 5 bullets. No filler phrases ("I've been working hard on…").
-3. Adapt tone to task type:
-   - Hotfix/bug → brief and factual.
-   - Feature → can include one "why this matters" line.
-   - Chore/infra → pure facts, no narrative.
-4. If the caller provides notes, weave them in naturally.
-5. Do NOT mention task IDs in the final update.`;
+- Output nothing but the JSON object.
+- Omit the "planComparison" key entirely when no plan is provided.
+- "nextUp" must have at most 3 items and must exclude tasks already in doneToday or inProgress.
+- Never include task IDs in "summary".`;
+
+export interface StatusUpdatePlanItem {
+  id: number;
+  title: string;
+  hours: number;
+}
+
+export interface StatusUpdatePlan {
+  items: StatusUpdatePlanItem[];
+  focus?: string;
+  totalHours?: number;
+}
 
 export interface StatusUpdateInput {
-  taskId: number;
+  /** Deprecated — ignored; scoping is now date-based. Kept for backwards-compat. */
+  taskId?: number;
+  plan?: StatusUpdatePlan;
   notes?: string;
   tone?: "technical" | "casual" | "formal";
 }
 
 export type StatusUpdateResult = AgentResult;
 
-const TOOL_NAMES = ["get_task", "list_tasks"] as const;
+const TOOL_NAMES = ["list_tasks", "get_task"] as const;
 
 export async function runStatusUpdateAgent(
   input: StatusUpdateInput,
   registry: ToolRegistry,
 ): Promise<StatusUpdateResult> {
-  const parts = [
-    `Generate a Slack-style status update for task ${input.taskId}.`,
-  ];
+  const today = new Date().toISOString();
+
+  const parts = [`Today is ${today}. Generate a standup report for today's work.`];
+
+  if (input.plan) {
+    parts.push(
+      `Day plan provided (use for planComparison): ${JSON.stringify(input.plan)}`,
+    );
+  }
 
   if (input.notes) {
     parts.push(`Additional notes from the engineer: "${input.notes}"`);
   }
+
   if (input.tone) {
     parts.push(`Requested tone: ${input.tone}`);
   }
