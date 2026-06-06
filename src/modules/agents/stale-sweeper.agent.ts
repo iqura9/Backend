@@ -98,7 +98,6 @@ export const sweepReportSchema = z
 export type SweepReport = z.infer<typeof sweepReportSchema>;
 
 export interface SweepResult extends AgentResult {
-  /** The model's raw `output`, parsed and validated into a precise shape. */
   report: SweepReport;
 }
 
@@ -133,7 +132,6 @@ export async function runStaleSweeper(
   }
   const report = parsed ?? fallbackReport(today.slice(0, 10), threshold);
 
-  // Re-serialize so consumers that parse the raw string get clean JSON.
   return { ...result, output: JSON.stringify(report), report };
 }
 

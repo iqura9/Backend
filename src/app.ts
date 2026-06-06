@@ -23,7 +23,6 @@ import { generateOpenApiSpec } from "./docs/openapi";
 export function buildApp(db: Database.Database): express.Application {
   const app = express();
 
-  // ─── Security & parsing ────────────────────────────────────────────────────
   app.use(helmet());
   // In production, lock CORS to the deployed frontend origin; in development reflect
   // any origin so localhost ports and tools like Swagger UI work without friction.
@@ -31,7 +30,6 @@ export function buildApp(db: Database.Database): express.Application {
   app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(express.json({ limit: "1mb" }));
 
-  // ─── Logging ───────────────────────────────────────────────────────────────
   app.use(
     pinoHttp({
       logger,
@@ -39,10 +37,8 @@ export function buildApp(db: Database.Database): express.Application {
     }),
   );
 
-  // ─── Rate limiting ─────────────────────────────────────────────────────────
   app.use("/api", apiLimiter);
 
-  // ─── Dependency wiring ─────────────────────────────────────────────────────
   const taskRepo = new SqliteTaskRepository(db);
   const taskService = new TaskService(taskRepo);
 
@@ -50,7 +46,6 @@ export function buildApp(db: Database.Database): express.Application {
   const taskTools = buildTaskTools(taskService);
   Object.values(taskTools).forEach((tool) => toolRegistry.register(tool));
 
-  // ─── API routes ────────────────────────────────────────────────────────────
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
   });
@@ -58,17 +53,14 @@ export function buildApp(db: Database.Database): express.Application {
   app.use("/api/tasks", makeTaskRouter(taskService));
   app.use("/api/agents", makeAgentRouter(toolRegistry));
 
-  // ─── Swagger UI ────────────────────────────────────────────────────────────
   const spec = generateOpenApiSpec();
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(spec));
   app.get("/docs.json", (_req, res) => res.json(spec));
 
-  // ─── 404 catch-all ─────────────────────────────────────────────────────────
   app.use((_req, res) => {
     res.status(404).json({ error: { code: "NOT_FOUND", message: "Route not found" } });
   });
 
-  // ─── Global error handler ──────────────────────────────────────────────────
   app.use(errorHandler);
 
   return app;

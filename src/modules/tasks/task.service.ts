@@ -42,9 +42,7 @@ export class TaskService {
     if (!this.repo.delete(id)) throw new NotFoundError(`Task ${id} not found`);
   }
 
-  /** Convenience: create multiple subtasks under a parent in one call. */
   createSubtasks(parentId: number, items: Omit<CreateTaskInput, "parentId">[]): Task[] {
-    // Validate parent once
     const parent = this.repo.findById(parentId);
     if (!parent) throw new NotFoundError(`Parent task ${parentId} not found`);
     if (parent.parentId !== null) {

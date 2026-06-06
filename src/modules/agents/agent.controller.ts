@@ -18,7 +18,6 @@ type SweepBody = z.infer<typeof sweepRequestSchema>;
 
 export function makeAgentController(registry: ToolRegistry) {
   return {
-    /** POST /api/agents/prioritize */
     async prioritize(_req: Request, res: Response, next: NextFunction): Promise<void> {
       try {
         const result = await runPrioritizationAgent(registry);
@@ -28,7 +27,6 @@ export function makeAgentController(registry: ToolRegistry) {
       }
     },
 
-    /** POST /api/agents/decompose */
     async decompose(req: Request, res: Response, next: NextFunction): Promise<void> {
       try {
         const body = req.body as DecomposeBody;
@@ -39,7 +37,6 @@ export function makeAgentController(registry: ToolRegistry) {
       }
     },
 
-    /** POST /api/agents/status-update */
     async statusUpdate(req: Request, res: Response, next: NextFunction): Promise<void> {
       try {
         const body = req.body as StatusUpdateBody;
@@ -50,7 +47,6 @@ export function makeAgentController(registry: ToolRegistry) {
       }
     },
 
-    /** POST /api/agents/sweep-stale */
     async sweepStale(req: Request, res: Response, next: NextFunction): Promise<void> {
       try {
         const body = req.body as SweepBody;

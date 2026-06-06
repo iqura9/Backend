@@ -19,8 +19,6 @@ function getGenAI(): GoogleGenerativeAI {
   return genAI;
 }
 
-// ── Available-model cache (TTL: 60 s) ─────────────────────────────────────────
-
 let _availableCache: { models: string[]; expiresAt: number } | undefined;
 
 /**
@@ -79,7 +77,6 @@ export function getModel(modelName: string, options: ModelOptions = {}): Generat
   });
 }
 
-/** The ordered list of models to try (from env). */
 export function getModelList(): readonly string[] {
   return env.AI_MODELS;
 }

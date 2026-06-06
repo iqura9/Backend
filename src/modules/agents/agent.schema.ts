@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-// ─── Shared response shape ────────────────────────────────────────────────────
-
 export const toolStepSchema = z.object({
   tool: z.string(),
   args: z.record(z.string(), z.unknown()),
@@ -14,11 +12,7 @@ export const agentResponseSchema = z.object({
   steps: z.array(toolStepSchema),
 });
 
-// ─── Prioritization ───────────────────────────────────────────────────────────
-
 export const prioritizeRequestSchema = z.object({}).strict();
-
-// ─── Decomposition ────────────────────────────────────────────────────────────
 
 export const decomposeRequestSchema = z
   .object({
@@ -37,8 +31,6 @@ export const decomposeRequestSchema = z
     (d) => d.taskId !== undefined || d.title !== undefined,
     { message: "Provide either taskId (to decompose an existing task) or title (for an ad-hoc decomposition)" },
   );
-
-// ─── Status update ────────────────────────────────────────────────────────────
 
 const planItemSchema = z.object({
   id: z.number().int().positive(),
@@ -60,8 +52,6 @@ export const statusUpdateRequestSchema = z.object({
   notes: z.string().max(2000).optional(),
   tone: z.enum(["technical", "casual", "formal"]).optional(),
 });
-
-// ─── Stale sweeper ────────────────────────────────────────────────────────────
 
 export const sweepRequestSchema = z.object({
   thresholdDays: z.number().int().min(1).max(365).default(7),

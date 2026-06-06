@@ -11,7 +11,6 @@ export function createDatabase(dbPath = env.DB_PATH): Database.Database {
 
   const db = new Database(resolved);
 
-  // Performance + correctness pragmas
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
   db.pragma("synchronous = NORMAL");
@@ -20,8 +19,6 @@ export function createDatabase(dbPath = env.DB_PATH): Database.Database {
 
   return db;
 }
-
-// ---------------------------------------------------------------------------
 
 const MIGRATIONS_TABLE = `
   CREATE TABLE IF NOT EXISTS _migrations (

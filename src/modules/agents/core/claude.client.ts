@@ -16,8 +16,6 @@ export function isClaudeAvailable(): boolean {
   return !!env.ANTHROPIC_API_KEY;
 }
 
-// ── Schema conversion (Gemini FunctionDeclaration → Anthropic Tool) ───────────
-
 function schemaToJsonSchema(schema: Schema): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   if (schema.type) out.type = schema.type; // SchemaType values are already lowercase strings

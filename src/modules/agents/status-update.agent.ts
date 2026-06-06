@@ -89,7 +89,6 @@ export const statusUpdateReportSchema = z
 export type StatusUpdateReport = z.infer<typeof statusUpdateReportSchema>;
 
 export interface StatusUpdateResult extends AgentResult {
-  /** The model's raw `output`, parsed and validated into a precise shape. */
   report: StatusUpdateReport;
 }
 
@@ -130,7 +129,6 @@ export async function runStatusUpdateAgent(
   }
   const report = parsed ?? fallbackReport(today.slice(0, 10));
 
-  // Re-serialize so consumers that parse the raw string get clean JSON.
   return { ...result, output: JSON.stringify(report), report };
 }
 

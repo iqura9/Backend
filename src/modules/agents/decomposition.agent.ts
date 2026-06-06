@@ -47,8 +47,6 @@ Rules:
 - "estimation" is a number of hours, not a string.
 - Output nothing but the single JSON object.`;
 
-// ─── Response schema (precise, discriminated by "status") ───────────────────────
-
 export const decompositionSubtaskSchema = z.object({
   title: z.string().min(1),
   description: z.string(),
@@ -67,7 +65,6 @@ export const decompositionResponseSchema = z.discriminatedUnion("status", [
   }),
 ]);
 
-/** The precise, validated shape of a decomposition response. */
 export type DecompositionResponse = z.infer<typeof decompositionResponseSchema>;
 export type DecompositionSubtask = z.infer<typeof decompositionSubtaskSchema>;
 
@@ -76,12 +73,10 @@ export interface DecomposeInput {
   title?: string;
   description?: string;
   persist?: boolean;
-  /** Clarification provided by the user in a follow-up call */
   clarification?: string;
 }
 
 export interface DecomposeResult extends AgentResult {
-  /** The model's raw `output` parsed and validated into a precise union. */
   decomposition: DecompositionResponse;
 }
 

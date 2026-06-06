@@ -1,9 +1,6 @@
-// ─── Value types ─────────────────────────────────────────────────────────────
 
 export type TaskStatus = "todo" | "in-progress" | "done";
 export type TaskPriority = "low" | "medium" | "high";
-
-// ─── Domain entity ────────────────────────────────────────────────────────────
 
 export interface Task {
   id: number;
@@ -18,8 +15,6 @@ export interface Task {
   updatedAt: string; // ISO-8601
 }
 
-// ─── Raw SQLite row (snake_case columns) ─────────────────────────────────────
-
 export interface TaskRow {
   id: number;
   parent_id: number | null;
@@ -32,8 +27,6 @@ export interface TaskRow {
   created_at: string;
   updated_at: string;
 }
-
-// ─── Input types (validated before reaching the repository) ──────────────────
 
 export interface CreateTaskInput {
   title: string;
@@ -61,8 +54,6 @@ export interface TaskQuery {
   sortBy?: "priority" | "createdAt";
   order?: "asc" | "desc";
 }
-
-// ─── Helper ───────────────────────────────────────────────────────────────────
 
 export function rowToTask(row: TaskRow): Task {
   return {

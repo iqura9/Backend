@@ -26,7 +26,6 @@ export function validateQuery<T>(schema: z.ZodType<T, any, any>) {
   };
 }
 
-/** Validates route params against a schema. */
 export function validateParams<T>(schema: z.ZodType<T, any, any>) {
   return (req: Request, _res: Response, next: NextFunction): void => {
     const result = schema.safeParse(req.params);
@@ -36,8 +35,6 @@ export function validateParams<T>(schema: z.ZodType<T, any, any>) {
     next();
   };
 }
-
-// ─── Commonly reused param schemas ───────────────────────────────────────────
 
 export const numericIdSchema = z.object({
   id: z

@@ -31,10 +31,7 @@ Respond with EXACTLY this JSON shape and nothing else:
 
 Rules: at most ${MAX_ITEMS} items, ordered best-first; "assumed" is true only when you estimated the hours yourself; "totalHours" MUST equal the sum of the items' hours and MUST be <= ${DAY_HARD_CAP_HOURS}. Output nothing but the JSON object.`;
 
-/** All tools this agent is allowed to call. */
 const TOOL_NAMES = ["list_tasks", "get_task"] as const;
-
-// ─── Response schema (precise) ──────────────────────────────────────────────────
 
 export const planItemSchema = z.object({
   id: z.coerce.number(),

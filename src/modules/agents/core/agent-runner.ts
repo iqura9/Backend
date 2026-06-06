@@ -7,8 +7,6 @@ import { AgentError, ServiceUnavailableError } from "../../../shared/errors";
 import { logger } from "../../../shared/logger";
 import { env } from "../../../config/env";
 
-// ─── Public types ─────────────────────────────────────────────────────────────
-
 export interface ToolStep {
   tool: string;
   args: Record<string, unknown>;
@@ -30,8 +28,6 @@ export interface AgentRunOptions {
   /** Maximum tool-call rounds before the runner gives up. Default: 6. */
   maxSteps?: number;
 }
-
-// ─── Runner ───────────────────────────────────────────────────────────────────
 
 /**
  * Generic multi-step tool-calling agent loop.
@@ -109,8 +105,6 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentResult> {
   );
 }
 
-// ─── Gemini loop ──────────────────────────────────────────────────────────────
-
 async function runOnGemini(
   modelName: string,
   modelOpts: ModelOptions,
@@ -158,8 +152,6 @@ async function runOnGemini(
   );
 }
 
-// ─── Claude loop ──────────────────────────────────────────────────────────────
-
 async function runOnClaude(
   systemPrompt: string,
   userMessage: string,
@@ -190,7 +182,6 @@ async function runOnClaude(
       (b): b is Anthropic.Messages.ToolUseBlock => b.type === "tool_use",
     );
 
-    // No tool calls or model finished → extract text and return
     if (toolUseBlocks.length === 0 || response.stop_reason === "end_turn") {
       const textBlock = response.content.find(
         (b): b is Anthropic.Messages.TextBlock => b.type === "text",
@@ -204,10 +195,8 @@ async function runOnClaude(
       throw new AgentError(`Agent exceeded maximum of ${maxSteps} tool-call rounds`, { steps });
     }
 
-    // Append the assistant's tool-use response to history
     messages.push({ role: "assistant", content: response.content as MsgParam["content"] });
 
-    // Execute each tool and collect results
     const toolResults: Array<{
       type: "tool_result";
       tool_use_id: string;
@@ -229,14 +218,11 @@ async function runOnClaude(
       });
     }
 
-    // Feed results back as a user turn
     messages.push({ role: "user", content: toolResults });
   }
 
   throw new AgentError(`Agent exceeded maximum of ${maxSteps} tool-call rounds`, { steps });
 }
-
-// ─── Shared helpers ───────────────────────────────────────────────────────────
 
 async function executeTool(
   registry: ToolRegistry,
@@ -263,4 +249,3 @@ async function executeTool(
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }
-

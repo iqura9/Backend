@@ -3,8 +3,6 @@ import { extendZodWithOpenApi } from "@asteasolutions/zod-to-openapi";
 
 extendZodWithOpenApi(z);
 
-// ─── Reusable enums ───────────────────────────────────────────────────────────
-
 export const statusSchema = z
   .enum(["todo", "in-progress", "done"])
   .openapi({ example: "todo", description: "Lifecycle state of the task" });
@@ -12,8 +10,6 @@ export const statusSchema = z
 export const prioritySchema = z
   .enum(["low", "medium", "high"])
   .openapi({ example: "medium", description: "Business priority of the task" });
-
-// ─── Response schema (what the API returns) ───────────────────────────────────
 
 export const taskResponseSchema = z
   .object({
@@ -32,8 +28,6 @@ export const taskResponseSchema = z
     updatedAt: z.string().datetime(),
   })
   .openapi("Task");
-
-// ─── Body schemas ─────────────────────────────────────────────────────────────
 
 export const createTaskSchema = z
   .object({
@@ -77,8 +71,6 @@ export const updateTaskSchema = z
     message: "At least one field must be provided",
   })
   .openapi("UpdateTaskInput");
-
-// ─── Query schema ─────────────────────────────────────────────────────────────
 
 export const taskQuerySchema = z.object({
   status: statusSchema.optional(),

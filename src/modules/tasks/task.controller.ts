@@ -12,7 +12,6 @@ type ListQuery = z.infer<typeof taskQuerySchema>;
 /** Factory so the controller is injected with the service instance from the composition root. */
 export function makeTaskController(service: TaskService) {
   return {
-    /** GET /api/tasks */
     list(req: Request, res: Response, next: NextFunction): void {
       try {
         const query = (req as Request & { validatedQuery: ListQuery }).validatedQuery ?? {};
@@ -23,7 +22,6 @@ export function makeTaskController(service: TaskService) {
       }
     },
 
-    /** GET /api/tasks/:id */
     getOne(req: Request, res: Response, next: NextFunction): void {
       try {
         const task = service.getTask(Number(req.params.id));
@@ -33,7 +31,6 @@ export function makeTaskController(service: TaskService) {
       }
     },
 
-    /** POST /api/tasks */
     create(req: Request, res: Response, next: NextFunction): void {
       try {
         const task = service.createTask(req.body as CreateBody);
@@ -43,7 +40,6 @@ export function makeTaskController(service: TaskService) {
       }
     },
 
-    /** PATCH /api/tasks/:id */
     update(req: Request, res: Response, next: NextFunction): void {
       try {
         const task = service.updateTask(Number(req.params.id), req.body as UpdateBody);
@@ -53,7 +49,6 @@ export function makeTaskController(service: TaskService) {
       }
     },
 
-    /** DELETE /api/tasks/:id */
     remove(req: Request, res: Response, next: NextFunction): void {
       try {
         service.deleteTask(Number(req.params.id));

@@ -14,8 +14,6 @@ import {
 
 const registry = new OpenAPIRegistry();
 
-// ─── Shared response helpers ──────────────────────────────────────────────────
-
 const envelopeOf = <T extends z.ZodTypeAny>(dataSchema: T) =>
   z.object({ data: dataSchema });
 
@@ -50,14 +48,11 @@ const agentResultSchema = z
   })
   .openapi("AgentResult");
 
-// Register named schemas
 registry.register("Task", taskResponseSchema);
 registry.register("CreateTaskInput", createTaskSchema);
 registry.register("UpdateTaskInput", updateTaskSchema);
 registry.register("ErrorResponse", errorSchema);
 registry.register("AgentResult", agentResultSchema);
-
-// ─── Task endpoints ───────────────────────────────────────────────────────────
 
 registry.registerPath({
   method: "get",
@@ -127,8 +122,6 @@ registry.registerPath({
   },
 });
 
-// ─── Agent endpoints ──────────────────────────────────────────────────────────
-
 registry.registerPath({
   method: "post",
   path: "/api/agents/prioritize",
@@ -187,8 +180,6 @@ registry.registerPath({
     503: { description: "AI unavailable", content: { "application/json": { schema: errorSchema } } },
   },
 });
-
-// ─── Generator ────────────────────────────────────────────────────────────────
 
 export function generateOpenApiSpec() {
   return new OpenApiGeneratorV3(registry.definitions).generateDocument({

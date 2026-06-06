@@ -8,8 +8,6 @@ import {
   rowToTask,
 } from "./task.model";
 
-// ─── Contract ─────────────────────────────────────────────────────────────────
-
 export interface TaskRepository {
   findAll(query?: TaskQuery): Task[];
   findById(id: number): Task | undefined;
@@ -17,8 +15,6 @@ export interface TaskRepository {
   update(id: number, input: UpdateTaskInput): Task | undefined;
   delete(id: number): boolean;
 }
-
-// ─── SQLite implementation ────────────────────────────────────────────────────
 
 // status & priority are normalized into lookup tables; resolve the names via JOIN
 // and alias them back to the column names TaskRow / rowToTask expect.

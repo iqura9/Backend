@@ -24,7 +24,6 @@ export function errorHandler(
     return;
   }
 
-  // Unknown / unhandled errors
   logger.error({ err, path: req.path }, "Unhandled error");
   res.status(500).json({
     error: {

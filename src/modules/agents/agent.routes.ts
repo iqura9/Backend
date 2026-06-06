@@ -13,7 +13,6 @@ export function makeAgentRouter(registry: ToolRegistry): Router {
   const router = Router();
   const ctrl = makeAgentController(registry);
 
-  // All AI routes share the stricter rate limiter
   router.use(aiLimiter);
 
   /**

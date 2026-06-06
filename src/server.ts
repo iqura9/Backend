@@ -12,8 +12,6 @@ const server = app.listen(env.PORT, () => {
   logger.info({ env: env.NODE_ENV, aiEnabled: !!env.GEMINI_API_KEY }, "Server ready");
 });
 
-// ─── Graceful shutdown ────────────────────────────────────────────────────────
-
 function shutdown(signal: string): void {
   logger.info({ signal }, "Shutting down gracefully…");
   server.close(() => {
