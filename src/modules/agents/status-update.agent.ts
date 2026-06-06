@@ -1,5 +1,8 @@
+import { z } from "zod";
 import { runAgent, type AgentResult } from "./core/agent-runner";
 import type { ToolRegistry } from "./core/tool-registry";
+import { parseLastValidJson } from "./core/parse-json-response";
+import { logger } from "../../shared/logger";
 
 const SYSTEM_PROMPT = `You are a staff engineer composing a daily standup report.
 
@@ -58,7 +61,37 @@ export interface StatusUpdateInput {
   tone?: "technical" | "casual" | "formal";
 }
 
-export type StatusUpdateResult = AgentResult;
+// ─── Response schema (lenient: passthrough keeps any extra fields) ──────────────
+
+const reportTaskSchema = z
+  .object({ id: z.coerce.number(), title: z.string(), status: z.string() })
+  .passthrough();
+
+export const statusUpdateReportSchema = z
+  .object({
+    date: z.string(),
+    summary: z.string(),
+    doneToday: z.array(reportTaskSchema).default([]),
+    inProgress: z.array(reportTaskSchema).default([]),
+    nextUp: z.array(reportTaskSchema).default([]),
+    blockers: z.array(z.unknown()).default([]),
+    planComparison: z
+      .object({
+        planned: z.coerce.number().optional(),
+        completed: z.coerce.number().optional(),
+        slipped: z.array(reportTaskSchema).default([]),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+export type StatusUpdateReport = z.infer<typeof statusUpdateReportSchema>;
+
+export interface StatusUpdateResult extends AgentResult {
+  /** The model's raw `output`, parsed and validated into a precise shape. */
+  report: StatusUpdateReport;
+}
 
 const TOOL_NAMES = ["list_tasks", "get_task"] as const;
 
@@ -84,10 +117,30 @@ export async function runStatusUpdateAgent(
     parts.push(`Requested tone: ${input.tone}`);
   }
 
-  return runAgent({
+  const result = await runAgent({
     systemPrompt: SYSTEM_PROMPT,
     userMessage: parts.join("\n"),
     toolNames: [...TOOL_NAMES],
     registry,
   });
+
+  const parsed = parseLastValidJson(result.output, statusUpdateReportSchema);
+  if (!parsed) {
+    logger.warn({ output: result.output }, "Status-update agent returned no valid JSON report");
+  }
+  const report = parsed ?? fallbackReport(today.slice(0, 10));
+
+  // Re-serialize so consumers that parse the raw string get clean JSON.
+  return { ...result, output: JSON.stringify(report), report };
+}
+
+function fallbackReport(date: string): StatusUpdateReport {
+  return {
+    date,
+    summary: "Couldn't generate a standup report — please try again.",
+    doneToday: [],
+    inProgress: [],
+    nextUp: [],
+    blockers: [],
+  };
 }

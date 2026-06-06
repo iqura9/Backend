@@ -15,7 +15,7 @@ export const apiLimiter = rateLimit({
 
 export const aiLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
-  max: 10,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

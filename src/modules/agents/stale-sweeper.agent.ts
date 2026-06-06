@@ -1,5 +1,8 @@
+import { z } from "zod";
 import { runAgent, type AgentResult } from "./core/agent-runner";
 import type { ToolRegistry } from "./core/tool-registry";
+import { parseLastValidJson } from "./core/parse-json-response";
+import { logger } from "../../shared/logger";
 
 const SYSTEM_PROMPT = `You are a technical lead running a backlog health sweep.
 
@@ -65,7 +68,39 @@ export interface SweepInput {
   apply?: boolean;
 }
 
-export type SweepResult = AgentResult;
+// ─── Response schema (lenient: passthrough keeps any extra fields) ──────────────
+
+const staleItemSchema = z
+  .object({
+    id: z.coerce.number(),
+    title: z.string(),
+    status: z.string(),
+    priority: z.string(),
+    daysSinceUpdate: z.coerce.number(),
+    diagnosis: z.string(),
+    action: z.string(),
+    applied: z.boolean().default(false),
+    changes: z.string().optional(),
+  })
+  .passthrough();
+
+export const sweepReportSchema = z
+  .object({
+    date: z.string(),
+    thresholdDays: z.coerce.number(),
+    summary: z.string(),
+    stale: z.array(staleItemSchema).default([]),
+    healthy: z.coerce.number().default(0),
+    applied: z.boolean().default(false),
+  })
+  .passthrough();
+
+export type SweepReport = z.infer<typeof sweepReportSchema>;
+
+export interface SweepResult extends AgentResult {
+  /** The model's raw `output`, parsed and validated into a precise shape. */
+  report: SweepReport;
+}
 
 const TOOL_NAMES_READ = ["list_tasks", "get_task"] as const;
 const TOOL_NAMES_WRITE = ["list_tasks", "get_task", "update_task", "create_subtasks"] as const;
@@ -84,11 +119,33 @@ export async function runStaleSweeper(
       : `apply=false — diagnose and propose actions only. Do NOT call update_task or create_subtasks.`,
   ];
 
-  return runAgent({
+  const result = await runAgent({
     systemPrompt: SYSTEM_PROMPT,
     userMessage: parts.join("\n"),
     toolNames: input.apply ? [...TOOL_NAMES_WRITE] : [...TOOL_NAMES_READ],
     registry,
     maxSteps: 8,
   });
+
+  const parsed = parseLastValidJson(result.output, sweepReportSchema);
+  if (!parsed) {
+    logger.warn({ output: result.output }, "Stale-sweeper agent returned no valid JSON report");
+  }
+  const report = parsed ?? fallbackReport(today.slice(0, 10), threshold);
+
+  // Re-serialize so consumers that parse the raw string get clean JSON.
+  return { ...result, output: JSON.stringify(report), report };
+}
+
+function fallbackReport(date: string, thresholdDays: number): SweepReport {
+  return {
+    date,
+    thresholdDays,
+    summary: "Couldn't complete the backlog sweep — please try again.",
+    stale: [],
+    healthy: 0,
+    // We couldn't parse the result, so make no claim that fixes were applied.
+    // Any tool calls that did run are still visible in `result.steps`.
+    applied: false,
+  };
 }
