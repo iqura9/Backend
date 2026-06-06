@@ -26,6 +26,11 @@ const schema = z.object({
   /** Which AI provider to try first. The other is used as fallback. */
   AI_PROVIDER_PRIORITY: z.enum(["gemini", "claude"]).default("gemini"),
   DB_PATH: z.string().default("data/devlog.db"),
+  /**
+   * Allowed CORS origin in production. In development any origin is reflected.
+   * Defaults to the deployed frontend domain.
+   */
+  CORS_ORIGIN: z.string().default("https://devlog.iqurabooks.com"),
 });
 
 function loadEnv() {

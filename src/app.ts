@@ -5,6 +5,7 @@ import pinoHttp from "pino-http";
 import swaggerUi from "swagger-ui-express";
 import type Database from "better-sqlite3";
 
+import { env } from "./config/env";
 import { logger } from "./shared/logger";
 import { errorHandler } from "./middleware/error-handler";
 import { apiLimiter } from "./middleware/rate-limit";
@@ -24,7 +25,10 @@ export function buildApp(db: Database.Database): express.Application {
 
   // ─── Security & parsing ────────────────────────────────────────────────────
   app.use(helmet());
-  app.use(cors());
+  // In production, lock CORS to the deployed frontend origin; in development reflect
+  // any origin so localhost ports and tools like Swagger UI work without friction.
+  const corsOrigin = env.NODE_ENV === "production" ? env.CORS_ORIGIN : true;
+  app.use(cors({ origin: corsOrigin, credentials: true }));
   app.use(express.json({ limit: "1mb" }));
 
   // ─── Logging ───────────────────────────────────────────────────────────────

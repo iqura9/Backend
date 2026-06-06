@@ -17,6 +17,23 @@ Run **`npm test`** to execute the automated test suite (Vitest, 24 tests).
 CRUD endpoints work without any API key. The AI agent endpoints need at least one
 provider key (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`) and return `503` when neither is set.
 
+### Run the whole stack with Docker
+
+The compose file lives in the sibling **`Develog-FE/`** folder and orchestrates this API + the
+Next.js frontend (the two folders sit side by side):
+
+```bash
+cp Backend/.env.example Backend/.env   # add your AI key(s)
+cd Develog-FE
+docker compose up --build
+# frontend → http://localhost:4000   backend → http://localhost:4001
+```
+
+Both services run in **production** mode on non-default ports (so they can sit behind nginx — override
+with `FRONTEND_PORT` / `BACKEND_PORT`). The SQLite file is bind-mounted from `Backend/data/`, so data
+survives `docker compose down` and rebuilds. In production CORS is locked to `CORS_ORIGIN`
+(default `https://devlog.iqurabooks.com`).
+
 ---
 
 ## Architecture
