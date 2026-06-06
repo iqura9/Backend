@@ -27,7 +27,7 @@ Rules: at most 7 items, ordered best-first; "assumed" is true only when you esti
 const TOOL_NAMES = ["list_tasks", "get_task"] as const;
 
 export interface PrioritizationResult extends AgentResult {
-  // output contains the markdown-formatted ranked plan
+  // output is a single JSON object string (see SYSTEM_PROMPT shape), parsed by the FE
 }
 
 export async function runPrioritizationAgent(
@@ -37,7 +37,7 @@ export async function runPrioritizationAgent(
 
   return runAgent({
     systemPrompt: SYSTEM_PROMPT,
-    userMessage: `Today is ${today}. Analyze all open tasks and tell the team exactly what to work on today and in what order. Show your reasoning.`,
+    userMessage: `Today is ${today}. Using the tools, work out exactly what the team should do today and in what order. Reason silently — do not narrate your thinking. Reply with ONLY the single JSON object specified in your instructions: no markdown, no code fences, no text before or after it.`,
     toolNames: [...TOOL_NAMES],
     registry,
   });
