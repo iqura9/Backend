@@ -1,19 +1,21 @@
 # DevLog Backend
 
 Task tracker API for engineering teams with a genuine multi-step AI agent layer.
+The Next.js frontend lives in `../Develog-FE` and talks to this service over REST.
 
 ## Quick start
 
 ```bash
-cp .env.example .env          # add your GEMINI_API_KEY
+cp .env.example .env          # add GEMINI_API_KEY and/or ANTHROPIC_API_KEY
 npm install
 npm run dev                    # http://localhost:3001
 ```
 
 Open **`http://localhost:3001/docs`** for the interactive Swagger UI.  
-Run **`npm test`** to execute the automated test suite.
+Run **`npm test`** to execute the automated test suite (Vitest, 24 tests).
 
-CRUD endpoints work without an API key. AI agent endpoints return `503` if `GEMINI_API_KEY` is missing.
+CRUD endpoints work without any API key. The AI agent endpoints need at least one
+provider key (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`) and return `503` when neither is set.
 
 ---
 
@@ -24,7 +26,11 @@ src/
   config/env.ts               — zod-validated, typed, frozen env (fail-fast on boot)
   db/
     connection.ts             — better-sqlite3 factory; WAL mode, FK ON, synchronous=NORMAL
-    migrations/001_init.sql   — schema tracked by a _migrations table
+    migrations/               — ordered .sql files, tracked by a _migrations table
+      001_init.sql            — tasks table (status/priority CHECK enums)
+      002_estimation.sql      — per-task estimation (hours)
+      003_normalize_enums.sql — status/priority moved to lookup tables (statuses, priorities)
+      004_estimation_from_subtasks.sql — flag to roll a task's estimate up from its subtasks
   shared/
     errors.ts                 — AppError hierarchy (NotFound, Validation, Conflict, ServiceUnavailable, Agent)
     logger.ts                 — pino with pino-pretty in dev
@@ -37,7 +43,8 @@ src/
     tasks/                    — feature module: model, schema, repository, service, controller, routes
     agents/
       core/
-        gemini.client.ts      — lazy Gemini model factory; 503 guard
+        gemini.client.ts      — lazy Gemini model factory + live model discovery
+        claude.client.ts      — lazy Anthropic client + Gemini→Anthropic tool-schema adapter
         agent-runner.ts       — generic multi-step tool-calling loop ← the real "agent"
         tool-registry.ts      — name-keyed tool store
         tools/task-tools.ts   — 5 task tools backed by TaskService
@@ -74,16 +81,22 @@ HTTP → express middleware (helmet, cors, pino-http, rate-limit)
 
 Tasks table with a `parent_id` self-reference (the Linear/Jira model):
 
-| Field       | Type    | Notes                                      |
-|-------------|---------|--------------------------------------------|
-| id          | INTEGER | PK, autoincrement                          |
-| parent_id   | INTEGER | FK → tasks(id) ON DELETE CASCADE; null = root task |
-| title       | TEXT    | Required, max 255                          |
-| description | TEXT    | Optional, max 10 000                       |
-| status      | TEXT    | todo \| in-progress \| done                 |
-| priority    | TEXT    | low \| medium \| high                       |
-| created_at  | TEXT    | ISO-8601, set on insert                    |
-| updated_at  | TEXT    | ISO-8601, maintained by an AFTER UPDATE trigger |
+| Field                    | Type    | Notes                                      |
+|--------------------------|---------|--------------------------------------------|
+| id                       | INTEGER | PK, autoincrement                          |
+| parent_id                | INTEGER | FK → tasks(id) ON DELETE CASCADE; null = root task |
+| title                    | TEXT    | Required, max 255                          |
+| description              | TEXT    | Optional, max 10 000                       |
+| status_id                | INTEGER | FK → statuses(id); exposed as `status` (todo \| in-progress \| done) |
+| priority_id              | INTEGER | FK → priorities(id); exposed as `priority` (low \| medium \| high) |
+| estimation               | REAL    | Estimated effort in hours; nullable        |
+| estimation_from_subtasks | INTEGER | 0/1 flag; when 1, effective estimate = sum of subtasks' estimations |
+| created_at               | TEXT    | ISO-8601, set on insert                    |
+| updated_at               | TEXT    | ISO-8601, maintained by an AFTER UPDATE trigger |
+
+`status` and `priority` are normalized into `statuses` / `priorities` lookup tables (each with a
+`sort_order` column that powers `sortBy=priority`). The REST contract stays string-based — the
+repository maps `name ↔ id` via a JOIN, so the API never exposes the FK ids.
 
 Nesting is capped at one level: a subtask cannot itself be a parent. Deleting a parent cascades to its subtasks.
 
@@ -105,34 +118,39 @@ All agents return:
 ```json
 {
   "data": {
-    "output": "<agent's text answer>",
+    "output": "<agent's answer — markdown, or a JSON string for some agents>",
     "model": "gemini-2.5-flash",
     "steps": [{ "tool": "list_tasks", "args": {}, "result": [...] }]
   }
 }
 ```
 
-The `steps` array is the full tool-call trace, proving multi-step reasoning.
+The `steps` array is the full tool-call trace, proving multi-step reasoning. `model` reflects whichever
+provider actually served the request (a Gemini model id, or `claude-haiku-4-5-…`).
 
 | Endpoint | Agent | Description |
 |---|---|---|
-| `POST /api/agents/prioritize` | Prioritization | Fetches all tasks, reasons over priority + age + status, returns a ranked "start your day" plan |
-| `POST /api/agents/decompose` | Decomposition | Fetches task details, checks clarity, returns `needs_clarification` for vague tasks; generates subtasks; writes to DB when `persist: true` |
-| `POST /api/agents/status-update` | Status Update | Gathers task + its subtasks, composes a Slack-style async update; adapts tone to task type |
+| `POST /api/agents/prioritize` | Prioritization | Reads every task, ranks by priority + age + momentum, and fills a ~7–8h day to a budget using each task's `estimation`. Returns a structured day plan. |
+| `POST /api/agents/decompose` | Decomposition | Fetches task details **and existing subtasks**, returns `needs_clarification` for vague tasks, otherwise generates role-prefixed (`[FE]`/`[BE]`/`[DevOps]`/`[QA]`) subtasks with estimates; writes to DB when `persist: true` |
+| `POST /api/agents/status-update` | Status Update | Scans all tasks by `updatedAt`, buckets today's work into done / in-progress / next-up, optionally compares against a supplied day plan, and emits a Slack-style standup |
 | `POST /api/agents/sweep-stale` | Stale Sweeper *(custom)* | Identifies tasks stuck beyond a threshold; diagnoses cause; when `apply: true`, safely triages (raise priority / split / escalate) |
 
 ---
 
 ## The agent engine
 
-`agent-runner.ts` runs a bounded **observe → decide → act** loop:
+`agent-runner.ts` runs a bounded, provider-agnostic **observe → decide → act** loop:
 
-1. Start a Gemini chat with a system instruction and tool declarations.
-2. Send the user message; inspect response parts.
-3. `functionCall` parts → execute via `ToolRegistry` (backed by `TaskService`) → collect `functionResponse` parts → send back. Repeat.
-4. No function calls → return text. Hard cap at `maxSteps` → `AgentError`.
+1. Build tool declarations and a system instruction from the calling agent.
+2. Pick a provider by `AI_PROVIDER_PRIORITY` (the other is the fallback); fall through to it when the primary key is missing or the call fails.
+3. Send the user message; inspect the response.
+4. Tool-call parts → execute via `ToolRegistry` (backed by `TaskService`) → feed the results back. Repeat.
+5. No tool calls → return text. A `maxSteps` overflow raises `AgentError` and is **not** masked as a provider failure (so you get the real cause, not a misleading "check your keys").
 
-This is a genuine agent, not a single prompt. The model decides which tools to call, in what order, based on what it observes — standard Observe-Reason-Act loop using Gemini's native function calling API.
+Two providers are supported behind one loop: **Gemini** (`gemini.client.ts`, native function calling +
+live model discovery) and **Anthropic Claude** (`claude.client.ts`, which adapts the same Gemini
+tool schemas to Anthropic's `tools` format). This is a genuine agent, not a single prompt — the model
+decides which tools to call, in what order, based on what it observes.
 
 ### Why Stale Sweeper?
 
@@ -143,7 +161,8 @@ Neglected tickets are a silent productivity killer in eng teams. They inflate es
 ## Scope tradeoffs
 
 - **No auth**: single-user, single-team — as specified.
-- **No FE**: backend-only as instructed.
+- **Two providers, one loop**: Gemini and Claude share the same runner so reviewers can plug in
+  whichever key they have. `AI_PROVIDER_PRIORITY` picks the primary; the other is automatic fallback.
 - **SQLite over Postgres**: zero infra, enough for the scale; limitation documented above.
 - **One-level subtask nesting**: keeps the data model simple and avoids recursive tree queries. Two levels is where most task trackers start and it covers the decomposition use-case cleanly.
 - **No retries on agent tool failures**: tool errors are returned to the model as `{ error: "..." }` rather than retried — the model can decide whether to try again or adapt.

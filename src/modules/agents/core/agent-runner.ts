@@ -67,6 +67,9 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentResult> {
     try {
       return await runOnGemini(modelName, modelOpts, userMessage, registry, toolNames, maxSteps);
     } catch (err: unknown) {
+      // A step-budget overflow is a deterministic agent failure, not a provider
+      // outage — propagate it instead of masking it as a fallback/availability error.
+      if (err instanceof AgentError) throw err;
       logger.warn(
         { model: modelName, cause: err instanceof Error ? err.message : String(err) },
         "Gemini model failed",
@@ -81,6 +84,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentResult> {
     try {
       return await runOnClaude(systemPrompt, userMessage, declarations, registry, toolNames, maxSteps);
     } catch (err: unknown) {
+      if (err instanceof AgentError) throw err;
       logger.warn({ cause: err instanceof Error ? err.message : String(err) }, "Claude failed");
       lastError = err;
       return null;

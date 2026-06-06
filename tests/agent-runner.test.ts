@@ -1,11 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Mock } from "vitest";
 
-// ─── Mock gemini.client before importing agent-runner ─────────────────────────
+// ─── Mock env + gemini.client before importing agent-runner ───────────────────
+
+// A Gemini key must be present for the runner to take the Gemini path; Claude is
+// left unconfigured so the test exercises the primary provider deterministically.
+vi.mock("../src/config/env", () => ({
+  env: {
+    NODE_ENV: "test",
+    PORT: 3001,
+    LOG_LEVEL: "silent",
+    GEMINI_API_KEY: "test-key",
+    ANTHROPIC_API_KEY: undefined,
+    AI_MODELS: ["gemini-test-model"],
+    AI_PROVIDER_PRIORITY: "gemini",
+    DB_PATH: ":memory:",
+  },
+}));
 
 vi.mock("../src/modules/agents/core/gemini.client", () => ({
   getModel: vi.fn(),
-  getModelList: vi.fn(() => ["gemini-test-model"]),
+  getAvailableModels: vi.fn(async () => ["gemini-test-model"]),
 }));
 
 import { runAgent } from "../src/modules/agents/core/agent-runner";

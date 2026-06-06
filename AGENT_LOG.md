@@ -59,6 +59,32 @@ The `sortBy=createdAt DESC` test was flaky: two synchronous inserts in the same 
 
 ---
 
+## Later evolution (after the initial backend)
+
+The project kept growing past the first cut. Honest notes on what changed and why:
+
+- **Scope reversed — a frontend was built.** The initial log (above) records a decision to stay
+  backend-only. That was later overridden: a full Next.js frontend now lives in `../Develog-FE`.
+  The earlier note is kept for honesty rather than rewritten.
+- **Second provider (Claude) behind the same loop.** `agent-runner.ts` was generalized from a
+  Gemini-only loop into a provider-agnostic one. `claude.client.ts` was added, including an adapter
+  that converts the existing Gemini tool declarations into Anthropic's `tools` schema, so no agent
+  code had to change. Provider order is controlled by `AI_PROVIDER_PRIORITY`, with automatic fallback.
+- **Estimation + subtask rollup.** Migrations `002` and `004` added an `estimation` (hours) column and
+  an `estimation_from_subtasks` flag; the prioritization agent now fills a day to an hour budget.
+- **Normalized enums.** Migration `003` moved `status`/`priority` from CHECK columns into
+  `statuses`/`priorities` lookup tables (with a `sort_order` that drives `sortBy=priority`). The REST
+  contract stayed string-based — the repository maps `name ↔ id`.
+- **Model-name caveat (resolved).** `env.AI_MODELS` still ships a few aspirational Gemini ids that
+  aren't live yet. This is intentional and harmless: `getAvailableModels()` queries the API's real
+  model list and filters `AI_MODELS` down to what actually exists, so unknown ids are simply skipped.
+- **Agent-error handling fix (caught by tests).** A `maxSteps` overflow used to be swallowed by the
+  provider try/catch and re-surfaced as a misleading `ServiceUnavailableError` ("check your keys").
+  `AgentError` now propagates instead of triggering fallback. The agent-runner tests were updated to
+  the new dual-provider mock setup; all 24 tests pass.
+
+---
+
 ## Summary
 
 The agent saved significant time on boilerplate, schema wiring, and test scaffolding. Every line was verified and several were corrected. The architecture decisions, the stale sweeper feature rationale, and the scope tradeoffs were driven by human judgment; the agent executed them.
