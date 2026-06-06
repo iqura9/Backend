@@ -20,11 +20,16 @@ export interface TaskRepository {
 
 // ─── SQLite implementation ────────────────────────────────────────────────────
 
-// Priority ORDER BY helper: high → 1, medium → 2, low → 3
-const PRIORITY_RANK = `CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`;
-
-const SELECT_COLS = `
-  id, parent_id, title, description, status, priority, estimation, created_at, updated_at
+// status & priority are normalized into lookup tables; resolve the names via JOIN
+// and alias them back to the column names TaskRow / rowToTask expect.
+const SELECT_TASK = `
+  SELECT
+    t.id, t.parent_id, t.title, t.description,
+    s.name AS status, p.name AS priority,
+    t.estimation, t.estimation_from_subtasks, t.created_at, t.updated_at
+  FROM tasks t
+  JOIN statuses   s ON s.id = t.status_id
+  JOIN priorities p ON p.id = t.priority_id
 `;
 
 export class SqliteTaskRepository implements TaskRepository {
@@ -35,17 +40,17 @@ export class SqliteTaskRepository implements TaskRepository {
     const params: unknown[] = [];
 
     if (query.status) {
-      conditions.push("status = ?");
+      conditions.push("s.name = ?");
       params.push(query.status);
     }
     if (query.priority) {
-      conditions.push("priority = ?");
+      conditions.push("p.name = ?");
       params.push(query.priority);
     }
     if (query.parentId === null) {
-      conditions.push("parent_id IS NULL");
+      conditions.push("t.parent_id IS NULL");
     } else if (query.parentId !== undefined) {
-      conditions.push("parent_id = ?");
+      conditions.push("t.parent_id = ?");
       params.push(query.parentId);
     }
 
@@ -53,11 +58,11 @@ export class SqliteTaskRepository implements TaskRepository {
     const dir = query.order?.toUpperCase() === "DESC" ? "DESC" : "ASC";
     const orderBy =
       query.sortBy === "createdAt"
-        ? `created_at ${dir}, id ${dir}` // id as tiebreaker when timestamps are identical
-        : `${PRIORITY_RANK} ${dir}, created_at ASC`;
+        ? `t.created_at ${dir}, t.id ${dir}` // id as tiebreaker when timestamps are identical
+        : `p.sort_order ${dir}, t.created_at ASC`;
 
     const rows = this.db
-      .prepare(`SELECT ${SELECT_COLS} FROM tasks ${where} ORDER BY ${orderBy}`)
+      .prepare(`${SELECT_TASK} ${where} ORDER BY ${orderBy}`)
       .all(...params) as TaskRow[];
 
     return rows.map(rowToTask);
@@ -65,7 +70,7 @@ export class SqliteTaskRepository implements TaskRepository {
 
   findById(id: number): Task | undefined {
     const row = this.db
-      .prepare(`SELECT ${SELECT_COLS} FROM tasks WHERE id = ?`)
+      .prepare(`${SELECT_TASK} WHERE t.id = ?`)
       .get(id) as TaskRow | undefined;
 
     return row ? rowToTask(row) : undefined;
@@ -74,8 +79,11 @@ export class SqliteTaskRepository implements TaskRepository {
   create(input: CreateTaskInput): Task {
     const { lastInsertRowid } = this.db
       .prepare(
-        `INSERT INTO tasks (parent_id, title, description, status, priority, estimation)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO tasks (parent_id, title, description, status_id, priority_id, estimation, estimation_from_subtasks)
+         VALUES (?, ?, ?,
+           (SELECT id FROM statuses   WHERE name = ?),
+           (SELECT id FROM priorities WHERE name = ?),
+           ?, ?)`,
       )
       .run(
         input.parentId ?? null,
@@ -84,6 +92,7 @@ export class SqliteTaskRepository implements TaskRepository {
         input.status ?? "todo",
         input.priority ?? "medium",
         input.estimation ?? null,
+        input.estimationFromSubtasks ? 1 : 0,
       );
 
     return this.findById(lastInsertRowid as number)!;
@@ -95,9 +104,10 @@ export class SqliteTaskRepository implements TaskRepository {
 
     if (input.title !== undefined) { sets.push("title = ?"); params.push(input.title); }
     if (input.description !== undefined) { sets.push("description = ?"); params.push(input.description); }
-    if (input.status !== undefined) { sets.push("status = ?"); params.push(input.status); }
-    if (input.priority !== undefined) { sets.push("priority = ?"); params.push(input.priority); }
+    if (input.status !== undefined) { sets.push("status_id = (SELECT id FROM statuses WHERE name = ?)"); params.push(input.status); }
+    if (input.priority !== undefined) { sets.push("priority_id = (SELECT id FROM priorities WHERE name = ?)"); params.push(input.priority); }
     if ("estimation" in input) { sets.push("estimation = ?"); params.push(input.estimation ?? null); }
+    if (input.estimationFromSubtasks !== undefined) { sets.push("estimation_from_subtasks = ?"); params.push(input.estimationFromSubtasks ? 1 : 0); }
 
     if (sets.length === 0) return this.findById(id);
 

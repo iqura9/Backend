@@ -1,21 +1,29 @@
 import { SchemaType } from "@google/generative-ai";
 import type { RegisteredTool } from "../tool-registry";
 import type { TaskService } from "../../../tasks/task.service";
-import type { TaskStatus, TaskPriority } from "../../../tasks/task.model";
+import type { Task, TaskStatus, TaskPriority } from "../../../tasks/task.model";
 
-/**
- * Builds the set of task-related tools backed by the injected TaskService.
- * Each tool is a standalone object with a function declaration (for Gemini)
- * and a typed executor (called by the agent runner).
- */
-export function buildTaskTools(service: TaskService): Record<string, RegisteredTool> {
+export function buildTaskTools(
+  service: TaskService,
+): Record<string, RegisteredTool> {
+  /**
+   * Resolves a task's effective estimation so agents never have to sum subtasks themselves:
+   * when `estimationFromSubtasks` is set, `estimation` is replaced by the sum of the task's
+   * subtasks' estimations.
+   */
+  function withEffectiveEstimation(task: Task): Task {
+    if (!task.estimationFromSubtasks) return task;
+    const subs = service.listTasks({ parentId: task.id });
+    const estimation = subs.reduce((sum, s) => sum + (s.estimation ?? 0), 0);
+    return { ...task, estimation };
+  }
+
   return {
-
     list_tasks: {
       declaration: {
         name: "list_tasks",
         description:
-          "List all tasks, optionally filtered by status or priority. Returns id, title, description, status, priority, createdAt, updatedAt, and parentId.",
+          "List all tasks, optionally filtered by status, priority or parentId. Returns id, title, description, status, priority, estimation (effort in hours, may be null — already resolved to the sum of subtasks when the task rolls up), estimationFromSubtasks (informational flag), createdAt, updatedAt, and parentId.",
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
@@ -29,7 +37,8 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
             },
             parentId: {
               type: SchemaType.STRING,
-              description: "Pass 'null' to get only top-level tasks, or a numeric ID to get subtasks of that parent",
+              description:
+                "Pass 'null' to get only top-level tasks, or a numeric ID to get subtasks of that parent",
             },
           },
           required: [],
@@ -42,15 +51,22 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
           parentId?: string;
         };
         const resolvedParentId =
-          parentId === "null" ? null : parentId !== undefined ? Number(parentId) : undefined;
-        return service.listTasks({ status, priority, parentId: resolvedParentId });
+          parentId === "null"
+            ? null
+            : parentId !== undefined
+            ? Number(parentId)
+            : undefined;
+        return service
+          .listTasks({ status, priority, parentId: resolvedParentId })
+          .map(withEffectiveEstimation);
       },
     },
 
     get_task: {
       declaration: {
         name: "get_task",
-        description: "Fetch a single task by its numeric ID, including all fields.",
+        description:
+          "Fetch a single task by its numeric ID, including all fields.",
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
@@ -62,7 +78,7 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
       execute: async (args) => {
         const { id } = args as { id: number };
         try {
-          return service.getTask(id);
+          return withEffectiveEstimation(service.getTask(id));
         } catch {
           return { error: `Task ${id} not found` };
         }
@@ -72,12 +88,19 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
     create_task: {
       declaration: {
         name: "create_task",
-        description: "Create a new task (or subtask when parentId is supplied).",
+        description:
+          "Create a new task (or subtask when parentId is supplied).",
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
-            title: { type: SchemaType.STRING, description: "Task title (required)" },
-            description: { type: SchemaType.STRING, description: "Detailed description" },
+            title: {
+              type: SchemaType.STRING,
+              description: "Task title (required)",
+            },
+            description: {
+              type: SchemaType.STRING,
+              description: "Detailed description",
+            },
             priority: {
               type: SchemaType.STRING,
               description: "Priority: 'low' | 'medium' | 'high'",
@@ -102,14 +125,21 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
           status?: TaskStatus;
           parentId?: number;
         };
-        return service.createTask({ title, description, priority, status, parentId });
+        return service.createTask({
+          title,
+          description,
+          priority,
+          status,
+          parentId,
+        });
       },
     },
 
     update_task: {
       declaration: {
         name: "update_task",
-        description: "Update fields on an existing task (partial update — only supplied fields change).",
+        description:
+          "Update fields on an existing task (partial update — only supplied fields change).",
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
@@ -152,7 +182,10 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
         parameters: {
           type: SchemaType.OBJECT,
           properties: {
-            parentId: { type: SchemaType.INTEGER, description: "ID of the parent task" },
+            parentId: {
+              type: SchemaType.INTEGER,
+              description: "ID of the parent task",
+            },
             items: {
               type: SchemaType.ARRAY,
               description: "List of subtasks to create",
@@ -162,7 +195,10 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
                   title: { type: SchemaType.STRING },
                   description: { type: SchemaType.STRING },
                   priority: { type: SchemaType.STRING },
-                  estimation: { type: SchemaType.NUMBER, description: "Estimated effort in hours" },
+                  estimation: {
+                    type: SchemaType.NUMBER,
+                    description: "Estimated effort in hours",
+                  },
                 },
                 required: ["title"],
               },
@@ -174,7 +210,12 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
       execute: async (args) => {
         const { parentId, items } = args as {
           parentId: number;
-          items: Array<{ title: string; description?: string; priority?: TaskPriority; estimation?: number }>;
+          items: Array<{
+            title: string;
+            description?: string;
+            priority?: TaskPriority;
+            estimation?: number;
+          }>;
         };
         try {
           return service.createSubtasks(parentId, items);
@@ -183,6 +224,5 @@ export function buildTaskTools(service: TaskService): Record<string, RegisteredT
         }
       },
     },
-
   };
 }

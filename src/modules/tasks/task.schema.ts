@@ -24,6 +24,10 @@ export const taskResponseSchema = z
     status: statusSchema,
     priority: prioritySchema,
     estimation: z.number().positive().nullable().openapi({ example: 2, description: "Estimated hours" }),
+    estimationFromSubtasks: z.boolean().openapi({
+      example: false,
+      description: "When true, the task's effective estimation is the sum of its subtasks' estimations",
+    }),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
   })
@@ -46,6 +50,9 @@ export const createTaskSchema = z
     status: statusSchema.optional(),
     priority: prioritySchema.optional(),
     estimation: z.number().positive().optional().openapi({ example: 2, description: "Estimated hours" }),
+    estimationFromSubtasks: z.boolean().optional().openapi({
+      description: "When true, the task's effective estimation is the sum of its subtasks' estimations",
+    }),
     parentId: z
       .number()
       .int()
@@ -62,6 +69,9 @@ export const updateTaskSchema = z
     status: statusSchema.optional(),
     priority: prioritySchema.optional(),
     estimation: z.number().positive().nullable().optional().openapi({ example: 2, description: "Estimated hours" }),
+    estimationFromSubtasks: z.boolean().optional().openapi({
+      description: "When true, the task's effective estimation is the sum of its subtasks' estimations",
+    }),
   })
   .refine((d) => Object.keys(d).length > 0, {
     message: "At least one field must be provided",

@@ -11,12 +11,15 @@ function createTestDb(): Database.Database {
   const db = new Database(":memory:");
   db.pragma("foreign_keys = ON");
 
-  // Apply migration directly
-  const sql = fs.readFileSync(
-    path.resolve(__dirname, "../src/db/migrations/001_init.sql"),
-    "utf8",
-  );
-  db.exec(sql);
+  // Apply all migrations in order, mirroring the real runner
+  const migrationsDir = path.resolve(__dirname, "../src/db/migrations");
+  const files = fs
+    .readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+  for (const file of files) {
+    db.exec(fs.readFileSync(path.join(migrationsDir, file), "utf8"));
+  }
   return db;
 }
 

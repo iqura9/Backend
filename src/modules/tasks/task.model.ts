@@ -13,6 +13,7 @@ export interface Task {
   status: TaskStatus;
   priority: TaskPriority;
   estimation: number | null; // hours
+  estimationFromSubtasks: boolean; // when true, effective estimation = sum of subtasks
   createdAt: string; // ISO-8601
   updatedAt: string; // ISO-8601
 }
@@ -27,6 +28,7 @@ export interface TaskRow {
   status: TaskStatus;
   priority: TaskPriority;
   estimation: number | null;
+  estimation_from_subtasks: number; // SQLite boolean: 0 | 1
   created_at: string;
   updated_at: string;
 }
@@ -39,6 +41,7 @@ export interface CreateTaskInput {
   status?: TaskStatus;
   priority?: TaskPriority;
   estimation?: number;
+  estimationFromSubtasks?: boolean;
   parentId?: number;
 }
 
@@ -48,6 +51,7 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   priority?: TaskPriority;
   estimation?: number | null;
+  estimationFromSubtasks?: boolean;
 }
 
 export interface TaskQuery {
@@ -69,6 +73,7 @@ export function rowToTask(row: TaskRow): Task {
     status: row.status,
     priority: row.priority,
     estimation: row.estimation ?? null,
+    estimationFromSubtasks: row.estimation_from_subtasks === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
